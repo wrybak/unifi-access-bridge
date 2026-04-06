@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and the project uses Semantic Versioning.
 
+## [0.1.2] - 2026-04-06
+
+### Fixed
+- Added compatibility with modern async `py-unifi-access` clients that require `api_token` and `session` in the constructor.
+- Normalized both legacy and modern UniFi Access clients behind the same adapter flow for auth, door fetches, unlocks, thumbnails, and websocket updates.
+- Added test coverage for both legacy and modern upstream client variants.
+
 ## [0.1.1] - 2026-04-06
 
 ### Fixed

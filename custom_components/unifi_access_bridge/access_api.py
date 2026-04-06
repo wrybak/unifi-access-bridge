@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
+from inspect import iscoroutinefunction
 from typing import Any
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .access_client import AccessClient, build_library_client, import_access_library
 from .access_errors import (
@@ -44,7 +47,9 @@ class UnifiAccessAdapter:
         self._client: AccessClient = build_library_client(
             library=self._library,
             host=host_with_port(host, port),
+            api_token=api_token,
             verify_ssl=verify_ssl,
+            session=async_get_clientsession(hass, verify_ssl=verify_ssl),
             on_message=self._schedule_message,
             on_connection_state=self._schedule_connection_state,
         )
@@ -62,10 +67,7 @@ class UnifiAccessAdapter:
 
     async def async_authenticate(self) -> None:
         """Authenticate and start websocket updates."""
-        status = await self._hass.async_add_executor_job(
-            self._client.authenticate,
-            self._api_token,
-        )
+        status = await self._async_call_client(self._client.authenticate, self._api_token)
         if status == "ok":
             return
         if status == "api_auth_error":
@@ -77,22 +79,32 @@ class UnifiAccessAdapter:
     async def async_get_doors(self) -> dict[str, DoorState]:
         """Fetch and normalize all bound doors."""
         try:
-            raw_doors = await self._hass.async_add_executor_job(
-                self._client.fetch_raw_doors
-            )
-        except self._library.auth_error as err:
+            raw_doors = await self._async_call_client(self._client.fetch_raw_doors)
+        except self._library.auth_errors as err:
             raise UnifiAccessAuthenticationError from err
-        except self._library.api_error as err:
+        except self._library.ssl_errors as err:
+            raise UnifiAccessSSLError from err
+        except self._library.connection_errors as err:
+            raise UnifiAccessCannotConnectError(
+                "Unable to fetch doors from UniFi Access"
+            ) from err
+        except self._library.api_errors as err:
             raise UnifiAccessCannotConnectError("Unable to fetch doors from UniFi Access") from err
         return self._state_store.replace_from_raw_doors(raw_doors)
 
     async def async_unlock_door(self, door_id: str) -> None:
         """Unlock a door via the Access API."""
         try:
-            await self._hass.async_add_executor_job(self._client.unlock_door, door_id)
-        except self._library.auth_error as err:
+            await self._async_call_client(self._client.unlock_door, door_id)
+        except self._library.auth_errors as err:
             raise UnifiAccessAuthenticationError from err
-        except self._library.api_error as err:
+        except self._library.ssl_errors as err:
+            raise UnifiAccessSSLError from err
+        except self._library.connection_errors as err:
+            raise UnifiAccessCannotConnectError(
+                f"Unable to unlock door {door_id}"
+            ) from err
+        except self._library.api_errors as err:
             raise UnifiAccessCannotConnectError(
                 f"Unable to unlock door {door_id}"
             ) from err
@@ -104,13 +116,19 @@ class UnifiAccessAdapter:
             return None
 
         try:
-            image_bytes = await self._hass.async_add_executor_job(
+            image_bytes = await self._async_call_client(
                 self._client.fetch_thumbnail_image,
                 thumbnail_url(self._client.host, state.thumbnail_path),
             )
-        except self._library.auth_error as err:
+        except self._library.auth_errors as err:
             raise UnifiAccessAuthenticationError from err
-        except self._library.api_error as err:
+        except self._library.ssl_errors as err:
+            raise UnifiAccessSSLError from err
+        except self._library.connection_errors as err:
+            raise UnifiAccessCannotConnectError(
+                f"Unable to fetch thumbnail for door {door_id}"
+            ) from err
+        except self._library.api_errors as err:
             raise UnifiAccessCannotConnectError(
                 f"Unable to fetch thumbnail for door {door_id}"
             ) from err
@@ -119,7 +137,7 @@ class UnifiAccessAdapter:
 
     async def async_close(self) -> None:
         """Close the underlying websocket client."""
-        await self._hass.async_add_executor_job(self._client.close)
+        await self._async_call_client(self._client.close)
 
     @callback
     def async_subscribe_updates(
@@ -160,6 +178,12 @@ class UnifiAccessAdapter:
         """Emit an adapter update to all listeners."""
         for listener in list(self._listeners):
             listener(update)
+
+    async def _async_call_client(self, method: Callable[..., Any], *args: Any) -> Any:
+        """Call either sync or async upstream client methods safely."""
+        if iscoroutinefunction(method):
+            return await method(*args)
+        return await self._hass.async_add_executor_job(partial(method, *args))
 
 
 async def async_create_access_adapter(
