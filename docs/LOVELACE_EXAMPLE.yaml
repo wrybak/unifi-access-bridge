@@ -1,0 +1,13 @@
+type: vertical-stack
+cards:
+  - type: picture-glance
+    title: Front Door
+    camera_image: camera.front_door_paired_view
+    camera_view: live
+    entities:
+      - entity: binary_sensor.front_door_door
+      - entity: button.front_door_unlock
+  - type: entities
+    entities:
+      - entity: event.front_door_access
+      - entity: event.front_door_doorbell

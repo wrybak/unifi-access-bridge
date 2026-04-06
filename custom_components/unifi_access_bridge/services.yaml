@@ -1,0 +1,10 @@
+unlock_door:
+  name: Unlock door
+  description: Unlock a UniFi Access door.
+  fields:
+    door_id:
+      name: Door ID
+      description: Internal UniFi Access door identifier.
+      required: true
+      selector:
+        text:

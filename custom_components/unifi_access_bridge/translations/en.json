@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to UniFi Access",
+        "description": "Provide the controller host and API token.",
+        "data": {
+          "host": "Host",
+          "api_token": "API token",
+          "verify_ssl": "Verify SSL certificate",
+          "openapi_port": "OpenAPI port"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect to UniFi Access",
+        "description": "Update the UniFi Access API token.",
+        "data": {
+          "api_token": "API token"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure UniFi Access Bridge",
+        "description": "Update the controller connection settings.",
+        "data": {
+          "host": "Host",
+          "api_token": "API token",
+          "verify_ssl": "Verify SSL certificate",
+          "openapi_port": "OpenAPI port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to controller",
+      "invalid_auth": "Authentication failed",
+      "ssl_error": "SSL verification failed",
+      "unknown": "Unexpected error"
+    }
+  },
+  "options": {
+    "step": {
+      "door": {
+        "title": "Door Camera Mapping",
+        "description": "Configure camera source {door_number}/{door_total} for {door_name}.",
+        "data": {
+          "source_type": "Camera source",
+          "value": "Camera entity or RTSP URL"
+        }
+      }
+    }
+  }
+}
