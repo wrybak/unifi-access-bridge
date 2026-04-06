@@ -7,7 +7,7 @@ from typing import Any
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 
-from .access_client import build_library_client, import_access_library
+from .access_client import AccessClient, build_library_client, import_access_library
 from .access_errors import (
     UnifiAccessAuthenticationError,
     UnifiAccessBridgeError,
@@ -41,7 +41,7 @@ class UnifiAccessAdapter:
         self._websocket_connected = False
         self._state_store = AccessStateStore()
         self._library = import_access_library()
-        self._client = build_library_client(
+        self._client: AccessClient = build_library_client(
             library=self._library,
             host=host_with_port(host, port),
             verify_ssl=verify_ssl,
@@ -77,7 +77,9 @@ class UnifiAccessAdapter:
     async def async_get_doors(self) -> dict[str, DoorState]:
         """Fetch and normalize all bound doors."""
         try:
-            raw_doors = await self._hass.async_add_executor_job(self._fetch_raw_doors)
+            raw_doors = await self._hass.async_add_executor_job(
+                self._client.fetch_raw_doors
+            )
         except self._library.auth_error as err:
             raise UnifiAccessAuthenticationError from err
         except self._library.api_error as err:
@@ -103,7 +105,7 @@ class UnifiAccessAdapter:
 
         try:
             image_bytes = await self._hass.async_add_executor_job(
-                self._client._get_thumbnail_image,  # noqa: SLF001
+                self._client.fetch_thumbnail_image,
                 thumbnail_url(self._client.host, state.thumbnail_path),
             )
         except self._library.auth_error as err:
@@ -132,12 +134,6 @@ class UnifiAccessAdapter:
                 self._listeners.remove(listener)
 
         return _unsubscribe
-
-    def _fetch_raw_doors(self) -> list[dict[str, Any]]:
-        """Return the raw doors payload from the upstream client."""
-        return self._client._make_http_request(
-            f"{self._client.host}{self._library.doors_url}"
-        )  # noqa: SLF001
 
     def _schedule_message(self, payload: dict[str, Any]) -> None:
         """Forward websocket messages from the thread into the event loop."""

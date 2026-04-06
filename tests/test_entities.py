@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -162,3 +162,37 @@ async def test_websocket_reconnect_state_is_reflected_on_entities(
         hass.states.get("binary_sensor.front_door_door").attributes["websocket_connected"]
         is True
     )
+
+
+async def test_websocket_disconnect_enables_poll_fallback(hass) -> None:
+    """Start polling only while websocket push is disconnected."""
+    entry = MockConfigEntry(domain=DOMAIN, title="UniFi Access Bridge", data=MOCK_CONFIG)
+    fake_adapter = SimpleNamespace(
+        websocket_connected=True,
+        async_subscribe_updates=lambda listener: lambda: None,
+        async_get_doors=AsyncMock(return_value={MOCK_DOOR_ID: make_door_state()}),
+        async_unlock_door=AsyncMock(),
+        async_refresh_thumbnail=AsyncMock(return_value=None),
+        async_close=AsyncMock(),
+    )
+    coordinator = UnifiAccessBridgeCoordinator(hass, entry, fake_adapter)
+    unsubscribe = Mock()
+
+    with patch(
+        "custom_components.unifi_access_bridge.coordinator.async_track_time_interval",
+        return_value=unsubscribe,
+    ) as track_time_interval:
+        await coordinator._async_setup()
+
+        coordinator._handle_adapter_update(AccessUpdate(websocket_connected=False))
+
+        track_time_interval.assert_called_once()
+        poll_callback = track_time_interval.call_args.args[1]
+
+        with patch.object(coordinator, "async_request_refresh", AsyncMock()) as refresh:
+            await poll_callback(None)
+            refresh.assert_awaited_once()
+
+        coordinator._handle_adapter_update(AccessUpdate(websocket_connected=True))
+
+    unsubscribe.assert_called_once()

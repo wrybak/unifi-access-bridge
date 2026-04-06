@@ -37,6 +37,10 @@ class DoorPositionBinarySensor(UnifiAccessBridgeEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.DOOR
     _attr_name = "Door"
 
+    def __init__(self, coordinator, door_id: str) -> None:
+        """Initialize the door position sensor."""
+        super().__init__(coordinator, door_id, "door")
+
     @property
     def is_on(self) -> bool:
         """Return True if the door is open."""

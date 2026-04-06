@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.const import Platform
 
 DOMAIN = "unifi_access_bridge"
@@ -17,6 +19,7 @@ ATTR_DOOR_ID = "door_id"
 SERVICE_UNLOCK_DOOR = "unlock_door"
 
 DEFAULT_OPENAPI_PORTS: tuple[int, int] = (12445, 12455)
+POLL_FALLBACK_INTERVAL = timedelta(seconds=30)
 
 EVENT_CATEGORY_ACCESS = "access"
 EVENT_CATEGORY_DOORBELL = "doorbell"

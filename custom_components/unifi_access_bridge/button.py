@@ -36,6 +36,10 @@ class UnlockDoorButton(UnifiAccessBridgeEntity, ButtonEntity):
 
     _attr_name = "Unlock"
 
+    def __init__(self, coordinator, door_id: str) -> None:
+        """Initialize the unlock button."""
+        super().__init__(coordinator, door_id, "unlock")
+
     async def async_press(self) -> None:
         """Unlock the associated door."""
         await self.coordinator.async_unlock_door(self._door_id)

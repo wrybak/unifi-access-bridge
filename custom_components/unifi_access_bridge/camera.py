@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from homeassistant.components.camera import CameraEntity, CameraEntityFeature
+from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -36,7 +36,7 @@ async def async_setup_entry(
     entry.async_on_unload(coordinator.async_add_listener(_add_entities))
 
 
-class DoorCameraEntity(UnifiAccessBridgeEntity, CameraEntity):
+class DoorCameraEntity(UnifiAccessBridgeEntity, Camera):
     """Camera entity for the door's paired view."""
 
     _attr_name = "Paired View"
@@ -50,7 +50,7 @@ class DoorCameraEntity(UnifiAccessBridgeEntity, CameraEntity):
     ) -> None:
         """Initialize the door camera entity."""
         super().__init__(coordinator, door_id, "paired_view")
-        CameraEntity.__init__(self)
+        Camera.__init__(self)
         self.hass = hass
         self._entry = entry
 

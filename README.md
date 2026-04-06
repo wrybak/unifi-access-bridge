@@ -71,6 +71,11 @@ If `openapi_port` is omitted, the integration probes:
 
 The resolved port is stored back into the config entry.
 
+Runtime behavior:
+
+- WebSocket push is used first for door state and events.
+- When the websocket drops, the coordinator falls back to polling every 30 seconds until push reconnects.
+
 ## Camera Mapping
 
 Use the integration options flow to configure one source per discovered door.
@@ -122,6 +127,7 @@ data:
 - `snapshot`: uses UniFi Access thumbnail bytes only
 
 If the mapped Home Assistant camera entity disappears, the paired camera becomes unavailable cleanly.
+If the websocket drops, snapshot state and door state continue to refresh through the polling fallback until push resumes.
 
 ## Dashboard Example
 

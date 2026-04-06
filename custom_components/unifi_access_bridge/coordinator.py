@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+from inspect import signature
 import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .access_api import (
@@ -17,6 +19,7 @@ from .access_api import (
     UnifiAccessAuthenticationError,
     UnifiAccessBridgeError,
 )
+from .const import DOMAIN, POLL_FALLBACK_INTERVAL
 from .models import AccessUpdate, DoorEventPayload, DoorState
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,19 +37,34 @@ class UnifiAccessBridgeCoordinator(DataUpdateCoordinator[dict[str, DoorState]]):
         adapter: UnifiAccessAdapter,
     ) -> None:
         """Initialize coordinator."""
-        super().__init__(hass, logger=_LOGGER, name="unifi_access_bridge")
+        coordinator_kwargs = {
+            "logger": _LOGGER,
+            "name": DOMAIN,
+            "always_update": True,
+        }
+        if "config_entry" in signature(DataUpdateCoordinator.__init__).parameters:
+            coordinator_kwargs["config_entry"] = entry
+        super().__init__(hass, **coordinator_kwargs)
         self.adapter = adapter
         self.config_entry = entry
         self.websocket_connected = adapter.websocket_connected
         self.last_websocket_disconnect_at: datetime | None = None
         self._event_listeners: list[Callable[[DoorEventPayload], None]] = []
         self._unsubscribe_adapter: CALLBACK_TYPE | None = None
+        self._unsubscribe_poll_fallback: CALLBACK_TYPE | None = None
 
     async def _async_setup(self) -> None:
         """Subscribe to adapter pushes before the first refresh."""
+        await self.async_initialize()
+
+    async def async_initialize(self) -> None:
+        """Initialize adapter subscriptions for HA versions without coordinator setup hook."""
+        if self._unsubscribe_adapter is not None:
+            return
         self._unsubscribe_adapter = self.adapter.async_subscribe_updates(
             self._handle_adapter_update
         )
+        self._update_poll_fallback(self.adapter.websocket_connected)
 
     async def _async_update_data(self) -> dict[str, DoorState]:
         """Fetch the latest door state from Access."""
@@ -57,11 +75,12 @@ class UnifiAccessBridgeCoordinator(DataUpdateCoordinator[dict[str, DoorState]]):
         except UnifiAccessBridgeError as err:
             raise UpdateFailed(str(err)) from err
 
-        self.websocket_connected = self.adapter.websocket_connected
+        self._apply_websocket_state(self.adapter.websocket_connected)
         return doors
 
     async def async_shutdown(self) -> None:
         """Tear down adapter subscriptions and websocket resources."""
+        self._stop_poll_fallback()
         if self._unsubscribe_adapter is not None:
             self._unsubscribe_adapter()
             self._unsubscribe_adapter = None
@@ -123,12 +142,7 @@ class UnifiAccessBridgeCoordinator(DataUpdateCoordinator[dict[str, DoorState]]):
         data = dict(self.data) if self.data else {}
 
         if update.websocket_connected is not None:
-            self.websocket_connected = update.websocket_connected
-            if update.websocket_connected:
-                self.last_websocket_disconnect_at = None
-            else:
-                self.last_websocket_disconnect_at = datetime.now(tz=UTC)
-            changed = True
+            changed = self._apply_websocket_state(update.websocket_connected) or changed
 
         if update.door_state is not None:
             data[update.door_state.door_id] = update.door_state
@@ -140,3 +154,43 @@ class UnifiAccessBridgeCoordinator(DataUpdateCoordinator[dict[str, DoorState]]):
 
         if changed:
             self.async_set_updated_data(data)
+
+    @callback
+    def _apply_websocket_state(self, connected: bool) -> bool:
+        """Record websocket state changes and manage polling fallback."""
+        changed = self.websocket_connected != connected
+        self.websocket_connected = connected
+        if connected:
+            self.last_websocket_disconnect_at = None
+        elif changed:
+            self.last_websocket_disconnect_at = datetime.now(tz=UTC)
+        self._update_poll_fallback(connected)
+        return changed
+
+    @callback
+    def _update_poll_fallback(self, websocket_connected: bool) -> None:
+        """Enable polling only while push updates are unavailable."""
+        if websocket_connected:
+            self._stop_poll_fallback()
+            return
+
+        if self._unsubscribe_poll_fallback is not None:
+            return
+
+        self._unsubscribe_poll_fallback = async_track_time_interval(
+            self.hass,
+            self._async_poll_fallback,
+            POLL_FALLBACK_INTERVAL,
+        )
+
+    @callback
+    def _stop_poll_fallback(self) -> None:
+        """Stop the fallback polling timer if it is active."""
+        if self._unsubscribe_poll_fallback is None:
+            return
+        self._unsubscribe_poll_fallback()
+        self._unsubscribe_poll_fallback = None
+
+    async def _async_poll_fallback(self, _now: datetime) -> None:
+        """Refresh state while the websocket is disconnected."""
+        await self.async_request_refresh()

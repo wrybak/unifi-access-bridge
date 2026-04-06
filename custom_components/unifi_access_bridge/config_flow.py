@@ -8,8 +8,8 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import FlowResult
 
 from .const import CONF_API_TOKEN, CONF_OPENAPI_PORT, DOMAIN
 from .flow_validation import (
@@ -32,7 +32,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Handle the initial setup step."""
         if user_input is None:
             return self._show_connection_form("user")
@@ -53,7 +53,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reauth(
         self,
         entry_data: Mapping[str, Any],
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Handle re-authentication for invalid API tokens."""
         del entry_data
         return await self.async_step_reauth_confirm()
@@ -61,7 +61,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Confirm re-authentication with a new API token."""
         if user_input is None:
             return self.async_show_form(
@@ -88,7 +88,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reconfigure(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Handle reconfiguration of controller connection settings."""
         entry = self._get_reconfigure_entry()
         if user_input is None:
@@ -139,7 +139,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         *,
         defaults: Mapping[str, Any] | None = None,
         errors: dict[str, str] | None = None,
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Render a connection settings form."""
         return self.async_show_form(
             step_id=step_id,

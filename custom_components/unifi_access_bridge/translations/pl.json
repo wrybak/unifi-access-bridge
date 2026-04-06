@@ -46,6 +46,9 @@
           "value": "Camera entity or RTSP URL"
         }
       }
+    },
+    "error": {
+      "missing_value": "Podaj encję kamery albo adres RTSP URL dla tego typu źródła"
     }
   }
 }

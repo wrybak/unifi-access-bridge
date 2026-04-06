@@ -7,7 +7,8 @@ Odpowiada za:
 - autoryzację tokenem,
 - pobieranie listy drzwi,
 - unlock,
-- WebSocket events,
+- WebSocket events jako główną ścieżkę aktualizacji,
+- fallback do pollingu co 30 sekund po utracie push,
 - pobieranie miniaturek.
 
 ### 1.2 Domain layer
@@ -22,6 +23,9 @@ Publikuje encje:
 - binary_sensor
 - event
 - camera
+
+Wspólny stan jest utrzymywany przez `DataUpdateCoordinator`.
+Push aktualizuje go natychmiast, a polling działa tylko awaryjnie.
 
 ## 2. Źródła obrazu
 

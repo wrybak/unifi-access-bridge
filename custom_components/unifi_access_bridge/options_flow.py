@@ -6,9 +6,8 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_VERIFY_SSL
-from homeassistant.helpers.selector import EntitySelector, EntitySelectorConfig
+from homeassistant.data_entry_flow import FlowResult
 
 from .access_api import async_create_access_adapter
 from .const import (
@@ -42,7 +41,7 @@ class UnifiAccessBridgeOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Load discovered doors and start the per-door wizard."""
         del user_input
         self._doors = await self._async_get_doors()
@@ -58,7 +57,7 @@ class UnifiAccessBridgeOptionsFlow(config_entries.OptionsFlow):
     async def async_step_door(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> ConfigFlowResult:
+    ) -> FlowResult:
         """Configure one door mapping and continue to the next door."""
         if self._door_index >= len(self._doors):
             return self.async_create_entry(
@@ -68,6 +67,7 @@ class UnifiAccessBridgeOptionsFlow(config_entries.OptionsFlow):
 
         door_id, door_name = self._doors[self._door_index]
         current_mapping = CameraMapping.from_dict(door_id, self._mappings.get(door_id))
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             pending_mapping = CameraMapping(
@@ -76,19 +76,26 @@ class UnifiAccessBridgeOptionsFlow(config_entries.OptionsFlow):
                 value=self._normalize_value(user_input.get(CONF_SOURCE_VALUE)),
             )
             if self._mapping_requires_value(pending_mapping):
-                return self._show_door_form(door_name, pending_mapping)
+                errors["base"] = "missing_value"
+                return self._show_door_form(
+                    door_name,
+                    pending_mapping,
+                    errors=errors,
+                )
 
             self._mappings[door_id] = pending_mapping.as_dict()
             self._door_index += 1
             return await self.async_step_door()
 
-        return self._show_door_form(door_name, current_mapping)
+        return self._show_door_form(door_name, current_mapping, errors=errors)
 
     def _show_door_form(
         self,
         door_name: str,
         mapping: CameraMapping,
-    ) -> ConfigFlowResult:
+        *,
+        errors: dict[str, str] | None = None,
+    ) -> FlowResult:
         """Render the current door mapping form."""
         return self.async_show_form(
             step_id="door",
@@ -98,7 +105,7 @@ class UnifiAccessBridgeOptionsFlow(config_entries.OptionsFlow):
                 "door_number": str(self._door_index + 1),
                 "door_total": str(len(self._doors)),
             },
-            errors={},
+            errors=errors or {},
         )
 
     async def _async_get_doors(self) -> list[tuple[str, str]]:
@@ -144,18 +151,9 @@ class UnifiAccessBridgeOptionsFlow(config_entries.OptionsFlow):
                 CONF_SOURCE_TYPE,
                 default=mapping.source_type.value,
             ): vol.In(SOURCE_TYPE_LABELS),
+            vol.Optional(
+                CONF_SOURCE_VALUE,
+                default=mapping.value or "",
+            ): str,
         }
-        if mapping.source_type == CameraSourceType.HA_CAMERA:
-            fields[_value_field(mapping)] = EntitySelector(
-                EntitySelectorConfig(domain="camera")
-            )
-        elif mapping.source_type == CameraSourceType.RTSP:
-            fields[_value_field(mapping)] = str
         return fields
-
-
-def _value_field(mapping: CameraMapping) -> vol.Marker:
-    """Build the door form value field."""
-    if mapping.value:
-        return vol.Required(CONF_SOURCE_VALUE, default=mapping.value)
-    return vol.Required(CONF_SOURCE_VALUE)

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import json
 import logging
 import ssl
-from typing import Any
+from typing import Any, Protocol
 
 from .access_errors import UnifiAccessDependencyError
 
@@ -23,6 +23,27 @@ class AccessLibraryHandles:
     api_error: type[Exception]
     device_notifications_url: str
     doors_url: str
+
+
+class AccessClient(Protocol):
+    """Protocol for the wrapped upstream client."""
+
+    host: str
+
+    def authenticate(self, api_token: str) -> str:
+        """Authenticate against the Access controller."""
+
+    def fetch_raw_doors(self) -> list[dict[str, Any]]:
+        """Fetch the raw doors payload."""
+
+    def fetch_thumbnail_image(self, image_url: str) -> bytes:
+        """Fetch thumbnail bytes for a door."""
+
+    def unlock_door(self, door_id: str) -> None:
+        """Unlock a door through the upstream client."""
+
+    def close(self) -> None:
+        """Close the client and its websocket resources."""
 
 
 def import_access_library() -> AccessLibraryHandles:
@@ -51,7 +72,7 @@ def build_library_client(
     verify_ssl: bool,
     on_message: Callable[[dict[str, Any]], None],
     on_connection_state: Callable[[bool], None],
-) -> Any:
+) -> AccessClient:
     """Create a patched upstream client that exposes raw websocket events."""
 
     class ThreadAwareUnifiAccessClient(library.client_class):  # type: ignore[misc, valid-type]
@@ -125,6 +146,14 @@ def build_library_client(
                 on_close=self.on_close,
             )
             self._run_forever(self._bridge_websocket_app)
+
+        def fetch_raw_doors(self) -> list[dict[str, Any]]:
+            """Fetch raw doors while keeping private upstream calls isolated here."""
+            return self._make_http_request(f"{self.host}{library.doors_url}")  # noqa: SLF001
+
+        def fetch_thumbnail_image(self, image_url: str) -> bytes:
+            """Fetch thumbnail bytes while keeping private upstream calls isolated here."""
+            return self._get_thumbnail_image(image_url)  # noqa: SLF001
 
         def close(self) -> None:
             """Stop reconnecting and close the websocket if one exists."""

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_VERIFY_SSL
@@ -25,7 +25,10 @@ from .const import (
 )
 from .coordinator import UnifiAccessBridgeCoordinator
 
-UnifiAccessBridgeConfigEntry = ConfigEntry[UnifiAccessBridgeCoordinator]
+if TYPE_CHECKING:
+    UnifiAccessBridgeConfigEntry: TypeAlias = ConfigEntry[UnifiAccessBridgeCoordinator]
+else:
+    UnifiAccessBridgeConfigEntry = ConfigEntry
 
 SERVICE_UNLOCK_SCHEMA = vol.Schema({vol.Required(ATTR_DOOR_ID): str})
 
@@ -63,7 +66,12 @@ async def async_setup_entry(
         )
 
     coordinator = UnifiAccessBridgeCoordinator(hass, entry, adapter)
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_initialize()
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        await coordinator.async_shutdown()
+        raise
     entry.runtime_data = coordinator
     hass.data[DOMAIN][entry.entry_id] = coordinator
 

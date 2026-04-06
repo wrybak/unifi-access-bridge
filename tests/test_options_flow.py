@@ -52,3 +52,26 @@ async def test_options_flow_persists_per_door_mappings(hass, mock_config_entry) 
         "source_type": "rtsp",
         "value": "rtsp://camera.local/front",
     }
+
+
+async def test_options_flow_requires_value_for_rtsp_mapping(
+    hass, mock_config_entry
+) -> None:
+    """Keep the current door on screen when a value-backed mapping is incomplete."""
+    mock_config_entry.runtime_data = SimpleNamespace(
+        data={"door-001": make_door_state(door_id="door-001", name="Back Door")}
+    )
+    mock_config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "door"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={"source_type": "rtsp", "value": ""},
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "door"
+    assert result["errors"] == {"base": "missing_value"}
