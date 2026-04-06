@@ -95,6 +95,14 @@ Per-door camera mapping must stay in config entry options and use:
 6. If a file grows beyond that, split by responsibility instead of stacking features.
 7. Add docstrings for public modules, classes, and non-trivial methods.
 
+## Research Rules
+
+1. Use `context7` MCP when checking external library, API, and Home Assistant
+   documentation relevant to this project.
+2. Prefer `context7` over memory for unstable or version-sensitive contracts.
+3. If `context7` is unavailable, state that explicitly and use a conservative
+   fallback that preserves adapter isolation.
+
 ## Change Rules
 
 When changing behavior:

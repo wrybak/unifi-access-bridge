@@ -19,7 +19,7 @@ async def test_config_flow_success(hass) -> None:
     )
 
     with patch(
-        "custom_components.unifi_access_bridge.config_flow.async_create_access_adapter",
+        "custom_components.unifi_access_bridge.flow_validation.async_create_access_adapter",
         return_value=(FakeAdapter(make_door_state()), 12455),
     ):
         result = await hass.config_entries.flow.async_configure(
