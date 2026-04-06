@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from inspect import signature
 import json
 import logging
 import ssl
@@ -79,7 +80,7 @@ def build_library_client(
         """Small subclass that keeps websocket callbacks observable."""
 
         def __init__(self) -> None:
-            super().__init__(host=host, verify_ssl=verify_ssl, use_polling=False)
+            super().__init__(**_client_init_kwargs(library.client_class, host, verify_ssl))
             self._bridge_on_message = on_message
             self._bridge_on_connection_state = on_connection_state
             self._bridge_should_stop = False
@@ -170,3 +171,18 @@ def _ssl_options(verify_ssl: bool) -> dict[str, Any]:
     if verify_ssl:
         return {"cert_reqs": ssl.CERT_REQUIRED}
     return {"cert_reqs": ssl.CERT_NONE}
+
+
+def _client_init_kwargs(
+    client_class: type[Any],
+    host: str,
+    verify_ssl: bool,
+) -> dict[str, Any]:
+    """Build constructor kwargs compatible with multiple upstream client versions."""
+    kwargs: dict[str, Any] = {
+        "host": host,
+        "verify_ssl": verify_ssl,
+    }
+    if "use_polling" in signature(client_class.__init__).parameters:
+        kwargs["use_polling"] = False
+    return kwargs
